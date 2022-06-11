@@ -1,5 +1,5 @@
 # Raspberry-Pi-Hotspot
-The scripts in this directory enable a raspberry pi 3 (running raspbian jessie or stretch) to perform hotspot duties while forwarding client traffic through the ethernet port (or another wifi card/dongle) and out to the interwebs.
+The script(s) in this directory enable a Raspberry Pi to perform hotspot duties while forwarding client traffic through the ethernet port (or another wifi card/dongle) and out to the web.
 
 ## Installed software (and their dependencies)
 - hostapd
