@@ -1,7 +1,7 @@
 #!/bin/bash
 #raspberry-pi-hotspot
 
-#The following list of commands and files to edit enable a raspberry pi 3 (running raspbian stretch) to perform hotspot duties while #forwarding client traffic through the ethernet port and out to the interwebs.
+#The following list of commands and files to edit enable a Raspberry Pi with Raspberry Pi OS to setup and configure a hotspot while #forwarding client traffic through the ethernet port and out to the interwebs.
 #commands to install the software (saving iptables-persistent until we've added some iptables rules)
 
 if [ "$EUID" -ne 0 ];
@@ -24,6 +24,7 @@ apt-get remove --purge iptables-persistent -yq
 apt-get update -yq
 apt-get upgrade -yq
 apt-get install hostapd dnsmasq dialog -yq
+DEBIAN_FRONTEND=noninteractive apt-get install -yqq iptables-persistent
 
 for i in $(ls /sys/class/net); do
   if ping -c 1 -I $i 208.67.222.222 &> /dev/null
@@ -53,6 +54,7 @@ interface $HOTFACE
 static ip_address=10.1.1.1/24
 static routers=10.1.1.1
 static domain_name_servers=10.1.1.1,208.67.222.222 #opendns server
+nohook wpa_supplicant
 EOF
 
 #edits to /etc/dnsmasq.conf
@@ -60,30 +62,29 @@ echo ""
 echo "clients will be .2 through .222"
 cat << EOF >> /etc/dnsmasq.conf
 interface=$HOTFACE
-domain-needed
-bogus-priv
+server=1.1.1.1
 dhcp-range=10.1.1.2,10.1.1.222,24h
-EOF
+EOF 
 
 #edits to /etc/hostapd/hostapd.conf (will be a new file)
 echo ""
-echo "just a reminder, the ap ssid is $HOTSSID and pw is $HOTPASS"
+echo "Reminder, the AP SSID is $HOTSSID and PW is $HOTPASS"
 cat << EOF >> /etc/hostapd/hostapd.conf
 interface=$HOTFACE
 #driver=nl80211
 ssid=$HOTSSID
 hw_mode=g
-channel=3
+channel=6
 ieee80211n=1
-wmm_enabled=1
+wmm_enabled=0
 macaddr_acl=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=$HOTPASS
 wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
 rsn_pairwise=CCMP
-ht_capab=[HT40][SHORT-GI-20][DSSS_CCK-40]
 EOF
 
 #edits to /etc/default/hostapd
@@ -96,6 +97,9 @@ sed -i -- 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/g' /etc/sysctl.conf
 #edits to /etc/rc.local (to disable power mgmt on the wifi interface, add before the 'exit 0' line)
 #sed -i -- '$isudo iw dev "$HOTFACE" set power_save off' /etc/rc.local
 
+#edit to /etc/rc.local (to restore saved iptables, added before the 'exit 0' line)
+sed -i "/^exit0/i\ iptables-restore < /etc/iptables.ipv4.nat" /etc/rc.local
+
 #commands to add iptables rules (remember to change 'ethX' and 'wlan0' to the interfaces on your pi...easiest way to find them is the iwconfig command)
 
 iptables -t nat -A  POSTROUTING -o $HOTNET -j MASQUERADE
@@ -103,7 +107,8 @@ iptables -A FORWARD -i $HOTNET -o $HOTFACE -m state --state RELATED,ESTABLISHED 
 iptables -A FORWARD -i $HOTFACE -o $HOTNET -j ACCEPT
 
 #commands to install iptables-persistent (select 'yes' to both ipv4 and ipv6 'save current rules' dialogs)
-DEBIAN_FRONTEND=noninteractive apt-get install -yqq iptables-persistent
+#DEBIAN_FRONTEND=noninteractive apt-get install -yqq iptables-persistent
+sh -c "iptables-save > /etc/iptables.ipv4.nat"
 
 systemctl unmask hostapd
 systemctl enable hostapd
